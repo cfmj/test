@@ -25,10 +25,22 @@ const IncognitoDetector = (() => {
   }
 
   /**
+   * 从 User-Agent 中提取 Chrome 主版本号
+   * @returns {number} Chrome 主版本号；非 Chrome 浏览器返回 0
+   */
+  function getChromeVersion() {
+    const match = navigator.userAgent.match(/Chrome\/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  }
+
+  /**
    * Chrome / Edge 无痕模式检测
    *
-   * 原理：Chrome 无痕模式下，navigator.storage.estimate() 返回的
-   * quota（存储配额）被限制在约 120 MB 以内；正常模式下为数 GB。
+   * Chrome < 120：无痕模式下 navigator.storage.estimate() 的 quota
+   *   被固定限制在约 120 MB 以内，正常模式下为数 GB。
+   *
+   * Chrome >= 120（含 145+）：quota 限制改为基于设备 RAM（约为 RAM 的 10%），
+   *   120 MB 阈值已失效，改用 detectChromiumModern() 处理。
    *
    * 参考：https://developer.chrome.com/docs/privacy-security/storage-quota
    */
@@ -38,7 +50,14 @@ const IncognitoDetector = (() => {
     }
     try {
       const { quota } = await navigator.storage.estimate();
-      // 120 MB 阈值（字节）
+      const chromeVersion = getChromeVersion();
+
+      if (chromeVersion >= 120) {
+        // Chrome 120+ 修改了无痕模式存储配额计算逻辑，使用新方法检测
+        return await detectChromiumModern(quota);
+      }
+
+      // Chrome < 120：120 MB 阈值（字节）
       const INCOGNITO_QUOTA_THRESHOLD = 120 * 1024 * 1024;
       return {
         result: quota < INCOGNITO_QUOTA_THRESHOLD,
@@ -49,6 +68,55 @@ const IncognitoDetector = (() => {
     } catch (err) {
       return { result: false, method: 'storage-quota', reason: err.message };
     }
+  }
+
+  /**
+   * Chrome 120+ 无痕模式检测（包含 Chrome 145+）
+   *
+   * 原理：
+   * 1. navigator.storage.persist() 在无痕模式下始终返回 false；
+   *    若返回 true，可确认为正常模式。
+   * 2. Chrome 120+ 无痕模式 quota 约为设备 RAM 的 10%（通常 < 1 GB）；
+   *    正常模式 quota 约为磁盘空间的 60%（通常 >> 5 GB）。
+   *    以 deviceMemory × 12% 作为动态阈值，最低 300 MB。
+   *
+   * @param {number} quota navigator.storage.estimate() 返回的 quota（字节）
+   * @returns {Promise<object>}
+   */
+  async function detectChromiumModern(quota) {
+    // 信号一：storage.persist() —— 无痕模式下永远返回 false
+    if (navigator.storage && typeof navigator.storage.persist === 'function') {
+      try {
+        const persistent = await navigator.storage.persist();
+        if (persistent) {
+          // 已获得持久化存储权限，必定不是无痕模式
+          return { result: false, method: 'storage-persist', quota };
+        }
+      } catch (_) {
+        // API 不可用，忽略，继续使用配额检测
+      }
+    }
+
+    // 信号二：动态配额阈值
+    // navigator.deviceMemory 出于隐私保护最大上报 8 GB；
+    // 无痕 quota ≈ RAM × 10%；取 12% 留出安全裕量（覆盖 Chrome 各版本实现差异），
+    // 最低 300 MB（兼容低内存设备，防止 deviceMemory 缺失时阈值过小）。
+    // 默认值 4 GB：deviceMemory 不可读时取中等设备内存，避免阈值过高产生漏报。
+    const deviceMemoryGB =
+      typeof navigator.deviceMemory === 'number' && navigator.deviceMemory > 0
+        ? navigator.deviceMemory
+        : 4; // 默认 4 GB：无法读取时取中等设备内存估算值
+    const DYNAMIC_THRESHOLD = Math.max(
+      deviceMemoryGB * 0.12 * 1024 * 1024 * 1024, // RAM × 12%（比无痕实际 ~10% 多出 20% 裕量）
+      300 * 1024 * 1024 // 最低 300 MB，兼容低内存/旧设备
+    );
+
+    return {
+      result: quota < DYNAMIC_THRESHOLD,
+      method: 'storage-quota-v2',
+      quota,
+      threshold: DYNAMIC_THRESHOLD,
+    };
   }
 
   /**
@@ -168,7 +236,7 @@ const IncognitoDetector = (() => {
     };
   }
 
-  return { detect, getBrowserType };
+  return { detect, getBrowserType, getChromeVersion };
 })();
 
 // 兼容 CommonJS / ES Module / 全局变量

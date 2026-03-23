@@ -1,0 +1,26 @@
+{
+  "name": "webguard",
+  "version": "1.0.0",
+  "description": "Web 自动化环境与无痕模式检测库，支持将检测结果注入 HTTP 自定义请求头",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node test/runner.js",
+    "serve": "npx http-server . -p 8080 -o demo/index.html"
+  },
+  "files": [
+    "src/",
+    "docs/",
+    "demo/",
+    "README.md"
+  ],
+  "keywords": [
+    "automation-detection",
+    "incognito-detection",
+    "headless-browser",
+    "bot-detection",
+    "webdriver",
+    "privacy-mode"
+  ],
+  "author": "",
+  "license": "MIT"
+}

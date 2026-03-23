@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebGuard —— 自动化 & 无痕环境检测演示</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #0f0f1a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      color: #7ec8e3;
+      margin-bottom: 0.4rem;
+    }
+
+    .subtitle {
+      color: #888;
+      margin-bottom: 2rem;
+      font-size: 0.9rem;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      color: #a0a0c0;
+      margin-bottom: 1rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-size: 0.8rem;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1rem;
+      border-radius: 999px;
+      font-weight: 600;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .status-badge.safe   { background: #0d2a1a; color: #4caf50; border: 1px solid #4caf50; }
+    .status-badge.danger { background: #2a0d0d; color: #f44336; border: 1px solid #f44336; }
+    .status-badge.warn   { background: #2a1d0d; color: #ff9800; border: 1px solid #ff9800; }
+    .status-badge.loading { background: #1a1a2e; color: #888; border: 1px solid #444; }
+
+    .detail-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .detail-table tr + tr { border-top: 1px solid #2a2a4a; }
+    .detail-table td { padding: 0.4rem 0.2rem; }
+    .detail-table td:first-child { color: #888; white-space: nowrap; padding-right: 1rem; }
+    .detail-table td:last-child  { color: #c0d0ff; word-break: break-all; }
+
+    .pill { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin: 2px; }
+    .pill.triggered { background: #f4433622; color: #f44336; border: 1px solid #f44336; }
+    .pill.ok        { background: #4caf5022; color: #4caf50; border: 1px solid #4caf50; }
+
+    .header-section {
+      background: #1a1a2e;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .header-section h2 { font-size: 0.8rem; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+
+    .header-list { list-style: none; }
+    .header-list li {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #2a2a4a;
+      font-size: 0.85rem;
+      flex-wrap: wrap;
+    }
+    .header-list li:last-child { border-bottom: none; }
+    .header-key   { color: #7ec8e3; white-space: nowrap; }
+    .header-value { color: #c0d0ff; }
+
+    .btn {
+      padding: 0.6rem 1.4rem;
+      border-radius: 8px;
+      border: 1px solid #4a4a7a;
+      background: #2a2a4a;
+      color: #c0d0ff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #3a3a6a; }
+
+    .log-section {
+      background: #0d0d1a;
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .log-section h2 { font-size: 0.8rem; color: #a0a0c0; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    #request-log { list-style: none; font-size: 0.8rem; font-family: monospace; }
+    #request-log li { padding: 0.3rem 0; border-bottom: 1px solid #1a1a2e; color: #888; }
+    #request-log li .method { color: #7ec8e3; }
+    #request-log li .url { color: #a0c8ff; }
+    #request-log li .headers-tag { color: #4caf50; }
+  </style>
+</head>
+<body>
+
+<h1>🛡️ WebGuard</h1>
+<p class="subtitle">自动化 & 无痕环境实时检测演示 · 检测结果自动注入请求头</p>
+
+<div class="cards">
+  <!-- 自动化检测结果 -->
+  <div class="card" id="card-automation">
+    <h2>🤖 自动化环境检测</h2>
+    <div class="status-badge loading" id="badge-automation">⏳ 检测中…</div>
+    <table class="detail-table" id="table-automation"></table>
+  </div>
+
+  <!-- 无痕模式检测结果 -->
+  <div class="card" id="card-incognito">
+    <h2>🕵️ 无痕 / 隐私模式检测</h2>
+    <div class="status-badge loading" id="badge-incognito">⏳ 检测中…</div>
+    <table class="detail-table" id="table-incognito"></table>
+  </div>
+</div>
+
+<!-- 注入的请求头 -->
+<div class="header-section">
+  <h2>📡 注入的自定义请求头</h2>
+  <ul class="header-list" id="header-list">
+    <li style="color:#888">检测完成后将在此处显示…</li>
+  </ul>
+</div>
+
+<!-- 操作按钮 -->
+<div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap">
+  <button class="btn" id="btn-redetect">🔄 重新检测</button>
+  <button class="btn" id="btn-send-fetch">📤 发送测试 fetch 请求</button>
+  <button class="btn" id="btn-send-xhr">📤 发送测试 XHR 请求</button>
+</div>
+
+<!-- 请求日志 -->
+<div class="log-section">
+  <h2>📋 请求日志（模拟拦截）</h2>
+  <ul id="request-log"></ul>
+</div>
+
+<!-- ===== 检测脚本 ===== -->
+<script src="../src/automation.js"></script>
+<script src="../src/incognito.js"></script>
+<script src="../src/interceptor.js"></script>
+<script src="../src/index.js"></script>
+
+<script>
+  // ——— UI 工具函数 ———
+  function setBadge(id, isFlag, label) {
+    const el = document.getElementById(id);
+    el.className = 'status-badge ' + (isFlag ? 'danger' : 'safe');
+    el.textContent = isFlag ? '⚠️ ' + label : '✅ 正常';
+  }
+
+  function renderTable(id, rows) {
+    const el = document.getElementById(id);
+    el.innerHTML = rows.map(([k, v]) =>
+      `<tr><td>${k}</td><td>${v}</td></tr>`
+    ).join('');
+  }
+
+  function renderChecks(checks) {
+    return Object.entries(checks).map(([k, v]) =>
+      `<span class="pill ${v ? 'triggered' : 'ok'}">${k}</span>`
+    ).join('');
+  }
+
+  function renderHeaders(headers) {
+    const list = document.getElementById('header-list');
+    const entries = Object.entries(headers);
+    if (!entries.length) {
+      list.innerHTML = '<li style="color:#888">暂无注入的请求头</li>';
+      return;
+    }
+    list.innerHTML = entries.map(([k, v]) =>
+      `<li><span class="header-key">${k}:</span><span class="header-value">${v}</span></li>`
+    ).join('');
+  }
+
+  function addLog(method, url, headersInjected) {
+    const log = document.getElementById('request-log');
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="method">${method}</span> <span class="url">${url}</span> ` +
+      (headersInjected ? `<span class="headers-tag">✓ 已注入检测头</span>` : '');
+    log.prepend(li);
+  }
+
+  // ——— 主流程 ———
+  async function runDetection() {
+    // 重置 UI
+    document.getElementById('badge-automation').className = 'status-badge loading';
+    document.getElementById('badge-automation').textContent = '⏳ 检测中…';
+    document.getElementById('badge-incognito').className = 'status-badge loading';
+    document.getElementById('badge-incognito').textContent = '⏳ 检测中…';
+    document.getElementById('header-list').innerHTML = '<li style="color:#888">检测中…</li>';
+
+    // 先卸载旧拦截器，再重新初始化
+    WebGuard.destroy();
+
+    const result = await WebGuard.init({ debug: true });
+
+    // ——— 渲染自动化检测结果 ———
+    const auto = result.automation;
+    setBadge('badge-automation', auto.isAutomated, auto.automationTool || '已检测到自动化');
+    renderTable('table-automation', [
+      ['是否自动化环境', auto.isAutomated ? '是 ⚠️' : '否 ✅'],
+      ['推断工具', auto.automationTool || '—'],
+      ['触发的检测项', renderChecks(auto.checks)],
+    ]);
+
+    // ——— 渲染无痕检测结果 ———
+    const incog = result.incognito;
+    setBadge('badge-incognito', incog.isIncognito, '无痕 / 隐私模式');
+    renderTable('table-incognito', [
+      ['是否无痕模式', incog.isIncognito ? '是 ⚠️' : '否 ✅'],
+      ['浏览器类型', incog.browser],
+      ['检测方法', incog.detectionMethod],
+      ['存储配额', incog.details && incog.details.quota
+        ? (incog.details.quota / 1024 / 1024).toFixed(1) + ' MB'
+        : '—'],
+    ]);
+
+    // ——— 渲染注入请求头 ———
+    renderHeaders(WebGuard.getDetectionHeaders());
+  }
+
+  // ——— 按钮事件 ———
+  document.getElementById('btn-redetect').addEventListener('click', runDetection);
+
+  document.getElementById('btn-send-fetch').addEventListener('click', async () => {
+    // 使用模拟接口，实际项目中替换为真实接口
+    const url = 'https://httpbin.org/post';
+    addLog('POST [fetch]', url, true);
+    try {
+      await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ test: 'webguard-fetch' }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (_) {
+      addLog('POST [fetch]', url + ' (离线模式，仅演示拦截注入)', false);
+    }
+  });
+
+  document.getElementById('btn-send-xhr').addEventListener('click', () => {
+    const url = 'https://httpbin.org/post';
+    addLog('POST [XHR]', url, true);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.send(JSON.stringify({ test: 'webguard-xhr' }));
+  });
+
+  // ——— 启动 ———
+  runDetection();
+</script>
+</body>
+</html>

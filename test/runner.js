@@ -190,17 +190,41 @@ const AutomationDetector = require('../src/automation.js');
     assert(result.detectionMethod === 'storage-quota-v2', '检测方法应为 storage-quota-v2');
   }
 
-  // 测试 16：Chrome 145 storage.persist() 返回 true → 确定非无痕
+  // 测试 16：Chrome 145 无痕模式 persist() 返回 true（Chrome 145 行为变更）→ 应通过配额检测为无痕
+  // Chrome 145 无痕模式下 persist() 也可能返回 true，不再可靠，应忽略 persist 信号
   {
     global.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
-    global.navigator.storage.estimate = async () => ({ quota: 500 * 1024 * 1024 }); // 500 MB
-    global.navigator.storage.persist = async () => true; // 持久化权限已授予
+    global.navigator.deviceMemory = 8;
+    global.navigator.storage.estimate = async () => ({ quota: 500 * 1024 * 1024 }); // 500 MB（低于动态阈值：8 GB × 12% ≈ 983 MB）
+    global.navigator.storage.persist = async () => true; // 无痕模式下也返回 true（Chrome 145 新行为）
     const result = await IncognitoDetector.detect();
-    assert(!result.isIncognito, 'Chrome 145 persist=true：isIncognito 应为 false');
+    assert(result.isIncognito, 'Chrome 145 无痕 persist=true 低配额：isIncognito 应为 true（persist 不可靠）');
+    assert(result.detectionMethod === 'storage-quota-v2', '检测方法应为 storage-quota-v2（跳过 persist）');
+  }
+
+  // 测试 17：Chrome 145 正常模式 persist() 返回 true + 大配额 → 非无痕
+  {
+    global.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+    global.navigator.deviceMemory = 8;
+    global.navigator.storage.estimate = async () => ({ quota: 80 * 1024 * 1024 * 1024 }); // 80 GB
+    global.navigator.storage.persist = async () => true;
+    const result = await IncognitoDetector.detect();
+    assert(!result.isIncognito, 'Chrome 145 正常模式 persist=true 大配额：isIncognito 应为 false');
+    assert(result.detectionMethod === 'storage-quota-v2', '检测方法应为 storage-quota-v2');
+  }
+
+  // 测试 18：Chrome 130（120-144 范围）persist() 返回 true → 仍可信赖，确定非无痕
+  {
+    global.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
+    global.navigator.deviceMemory = 4;
+    global.navigator.storage.estimate = async () => ({ quota: 500 * 1024 * 1024 }); // 500 MB
+    global.navigator.storage.persist = async () => true; // Chrome 130 中 persist=true 仍可靠
+    const result = await IncognitoDetector.detect();
+    assert(!result.isIncognito, 'Chrome 130 persist=true：isIncognito 应为 false（persist 仍可靠）');
     assert(result.detectionMethod === 'storage-persist', '检测方法应为 storage-persist');
   }
 
-  // 测试 17：Chrome 145 无痕、低配额（100 MB）→ 是无痕（向下兼容）
+  // 测试 19：Chrome 145 无痕、低配额（100 MB）→ 是无痕（向下兼容）
   {
     global.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
     global.navigator.deviceMemory = 4;
@@ -210,7 +234,7 @@ const AutomationDetector = require('../src/automation.js');
     assert(result.isIncognito, 'Chrome 145 无痕 100 MB 配额：isIncognito 应为 true');
   }
 
-  // 测试 18：Chrome 119（旧版）无痕检测仍使用 120 MB 阈值
+  // 测试 20：Chrome 119（旧版）无痕检测仍使用 120 MB 阈值
   {
     global.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36';
     global.navigator.storage.estimate = async () => ({ quota: 64 * 1024 * 1024 }); // 64 MB
@@ -219,7 +243,7 @@ const AutomationDetector = require('../src/automation.js');
     assert(result.detectionMethod === 'storage-quota', 'Chrome 119 检测方法应为 storage-quota');
   }
 
-  // 测试 19：Chrome 119（旧版）正常模式
+  // 测试 21：Chrome 119（旧版）正常模式
   {
     global.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36';
     global.navigator.storage.estimate = async () => ({ quota: 5 * 1024 * 1024 * 1024 }); // 5 GB

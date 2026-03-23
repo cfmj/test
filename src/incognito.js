@@ -74,8 +74,10 @@ const IncognitoDetector = (() => {
    * Chrome 120+ 无痕模式检测（包含 Chrome 145+）
    *
    * 原理：
-   * 1. navigator.storage.persist() 在无痕模式下始终返回 false；
+   * 1. Chrome 120–144：navigator.storage.persist() 在无痕模式下始终返回 false；
    *    若返回 true，可确认为正常模式。
+   *    Chrome 145+：persist() 在无痕模式下也可能返回 true，不再可靠，
+   *    因此跳过该信号，仅依赖配额检测。
    * 2. Chrome 120+ 无痕模式 quota 约为设备 RAM 的 10%（通常 < 1 GB）；
    *    正常模式 quota 约为磁盘空间的 60%（通常 >> 5 GB）。
    *    以 deviceMemory × 12% 作为动态阈值，最低 300 MB。
@@ -84,8 +86,11 @@ const IncognitoDetector = (() => {
    * @returns {Promise<object>}
    */
   async function detectChromiumModern(quota) {
-    // 信号一：storage.persist() —— 无痕模式下永远返回 false
-    if (navigator.storage && typeof navigator.storage.persist === 'function') {
+    const chromeVersion = getChromeVersion();
+
+    // 信号一：storage.persist() —— 仅适用于 Chrome 120–144
+    // Chrome 145+ 无痕模式下 persist() 也可能返回 true，不再可靠
+    if (chromeVersion < 145 && navigator.storage && typeof navigator.storage.persist === 'function') {
       try {
         const persistent = await navigator.storage.persist();
         if (persistent) {
